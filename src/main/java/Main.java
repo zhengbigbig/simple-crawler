@@ -3,7 +3,6 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
-import org.apache.http.protocol.RequestUserAgent;
 import org.apache.http.util.EntityUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -16,13 +15,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-interface InsterestingLink {
-    boolean handleLink();
-}
-
 public class Main {
     public static void main(String[] args) throws IOException {
-
         // 待处理的链接池
         List<String> linkPool = new ArrayList<>();
         // 已处理的链接池
