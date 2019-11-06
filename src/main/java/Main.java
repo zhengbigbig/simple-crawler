@@ -13,32 +13,17 @@ import org.jsoup.select.Elements;
 import java.io.File;
 import java.io.IOException;
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
 
 public class Main {
     private static final String USER_NAME = "root";
     private static final String PASSWORD = "root";
 
-    @SuppressFBWarnings("DMI_CONSTANT_DB_PASSWORD") // 强制镇压不检查
     public static void main(String[] args) throws IOException, SQLException {
-        File projectDir = new File(System.getProperty("basedir", System.getProperty("user.dir")));
-        String jdbcUrl = "jdbc:h2:file:" + new File(projectDir, "/news").getAbsolutePath();
-        Connection connection = DriverManager.getConnection(jdbcUrl, USER_NAME, PASSWORD);
-        while (true) {
-            // 待处理的链接池
-            // 从数据库加载即将处理的链接的代码
-            List<String> linkPool = loadUrlsFromDatabase(connection, "select link from LINKS_TO_BE_PROCESSED");
+        Connection connection = connectTheDatabase();
+        String link;
 
-            if (linkPool.isEmpty()) {
-                break;
-            }
-
-            // 从待处理池中捞出一个处理
-            // 处理完后从池子（包括数据库）中删除
-            String link = linkPool.remove(linkPool.size() - 1);
-            insertLinkIntoDatabase(connection, link, "DELETE FROM LINKS_TO_BE_PROCESSED WHERE LINK = ?");
-
+        // 先从数据库里拿出来一个链接(拿出来并从数据库删除)，准备处理之
+        while ((link = getNextLinkFromDatabaseThenDelete(connection)) != null) {
             // 询问数据库，当前链接是不是已经被处理过了
             if (isLinkProcessed(connection, link)) {
                 continue;
@@ -51,18 +36,49 @@ public class Main {
                 // 假如这是一个新闻的详细页面，就存入数据库，否则，什么都不做
                 storeIntoDatabaseIfNewsPage(doc);
                 // 把处理过的放入数据库
-                insertLinkIntoDatabase(connection, link, "INSERT INTO LINKS_ALREADY_PROCESSED(LINK) VALUES (?)");
             }
         }
 
     }
 
+    @SuppressFBWarnings("DMI_CONSTANT_DB_PASSWORD") // 强制镇压不检查
+    private static Connection connectTheDatabase() throws SQLException {
+        File projectDir = new File(System.getProperty("basedir", System.getProperty("user.dir")));
+        String jdbcUrl = "jdbc:h2:file:" + new File(projectDir, "/news").getAbsolutePath();
+        return DriverManager.getConnection(jdbcUrl, USER_NAME, PASSWORD);
+    }
+
+    private static String getNextLinkFromDatabaseThenDelete(Connection connection) throws SQLException {
+        String link = getNextLinkFromDatabase(connection, "select link from LINKS_TO_BE_PROCESSED limit 1");
+        if (link != null) {
+            updateDatabase(connection, link, "INSERT INTO LINKS_ALREADY_PROCESSED(LINK) VALUES (?)");
+        }
+        return link;
+    }
+
+    private static void updateDatabase(Connection connection, String link, String s) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(s)) {
+            statement.setString(1, link);
+            statement.executeUpdate();
+        }
+    }
+
+    private static String getNextLinkFromDatabase(Connection connection, String sql) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                return resultSet.getString(1);
+            }
+        }
+        return null;
+    }
+
     private static void parseUrlsFromPageAndStoreIntoDatabase(Connection connection, Document doc) throws SQLException {
         for (Element aTag : doc.select("a")) {
             String href = aTag.attr("href");
-            insertLinkIntoDatabase(connection, href, "INSERT INTO LINKS_TO_BE_PROCESSED(LINK) VALUES (?)");
+            updateDatabase(connection, href, "INSERT INTO LINKS_TO_BE_PROCESSED(LINK) VALUES (?)");
         }
     }
+
 
     private static boolean isLinkProcessed(Connection connection, String link) throws SQLException {
         ResultSet resultSet = null;
@@ -78,23 +94,6 @@ public class Main {
             }
         }
         return false;
-    }
-
-    private static void insertLinkIntoDatabase(Connection connection, String link, String s) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(s)) {
-            statement.setString(1, link);
-            statement.executeUpdate();
-        }
-    }
-
-    private static List<String> loadUrlsFromDatabase(Connection connection, String sql) throws SQLException {
-        List<String> results = new ArrayList<>();
-        try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet resultSet = statement.executeQuery()) {
-            while (resultSet.next()) {
-                results.add(resultSet.getString(1));
-            }
-        }
-        return results;
     }
 
     private static void storeIntoDatabaseIfNewsPage(Document doc) {
