@@ -36,6 +36,7 @@ public class Main {
                 // 假如这是一个新闻的详细页面，就存入数据库，否则，什么都不做
                 storeIntoDatabaseIfNewsPage(doc);
                 // 把处理过的放入数据库
+                updateDatabase(connection, link, "INSERT INTO LINKS_ALREADY_PROCESSED (LINK) VALUES (?)");
             }
         }
 
@@ -51,8 +52,9 @@ public class Main {
     private static String getNextLinkFromDatabaseThenDelete(Connection connection) throws SQLException {
         String link = getNextLinkFromDatabase(connection, "select link from LINKS_TO_BE_PROCESSED limit 1");
         if (link != null) {
-            updateDatabase(connection, link, "INSERT INTO LINKS_ALREADY_PROCESSED(LINK) VALUES (?)");
+            updateDatabase(connection, link, "DELETE FROM LINKS_TO_BE_PROCESSED WHERE LINK = ?");
         }
+        System.out.println("link = " + link);
         return link;
     }
 
@@ -83,8 +85,8 @@ public class Main {
     private static boolean isLinkProcessed(Connection connection, String link) throws SQLException {
         ResultSet resultSet = null;
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM LINKS_ALREADY_PROCESSED WHERE LINK = ?")) {
-            resultSet = statement.executeQuery();
             statement.setString(1, link);
+            resultSet = statement.executeQuery();
             while (resultSet.next()) {
                 return true;
             }
@@ -102,7 +104,7 @@ public class Main {
             for (Element article : articles) {
                 String title = article.children().select("h1").text();
                 String time = article.children().select("time").text();
-                System.out.println("title = " + title + "time = " + time);
+                System.out.println("title = " + title + " time = " + time);
             }
         }
     }
