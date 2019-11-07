@@ -14,9 +14,9 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.stream.Collectors;
 
-public class Main {
+public class Crawler {
 
-    JdbcCrawlerDao dao = new JdbcCrawlerDao();
+    MybatisCrawlerDao dao = new MybatisCrawlerDao();
 
     public void run() throws SQLException, IOException {
 
@@ -43,10 +43,28 @@ public class Main {
 
 
     public static void main(String[] args) throws IOException, SQLException {
-        new Main().run();
+        new Crawler().run();
 
     }
 
+    private static boolean isInterestingLink(String link) {
+        return link.contains("news.sina.cn") && link.contains("//") || "https://sina.cn".equals(link);
+    }
+
+    @SuppressFBWarnings("RCN_REDUNDANT_NULLCHECK_WOULD_HAVE_BEEN_A_NPE")
+    private static Document httpGetAndParseHtml(String link) throws IOException {
+        CloseableHttpClient httpclient = HttpClients.createDefault();
+        HttpGet httpGet = new HttpGet(link);
+        httpGet.addHeader("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.120 Safari/537.36");
+        try (CloseableHttpResponse response1 = httpclient.execute(httpGet)) {
+            if (response1.getStatusLine().getStatusCode() == 200) {
+                HttpEntity entity1 = response1.getEntity();
+                String html = EntityUtils.toString(entity1);
+                return Jsoup.parse(html);
+            }
+        }
+        return null;
+    }
 
     private void parseUrlsFromPageAndStoreIntoDatabase(Document doc) throws SQLException {
         for (Element aTag : doc.select("a")) {
@@ -78,22 +96,5 @@ public class Main {
         }
     }
 
-    @SuppressFBWarnings("RCN_REDUNDANT_NULLCHECK_WOULD_HAVE_BEEN_A_NPE")
-    private static Document httpGetAndParseHtml(String link) throws IOException {
-        CloseableHttpClient httpclient = HttpClients.createDefault();
-        HttpGet httpGet = new HttpGet(link);
-        httpGet.addHeader("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.120 Safari/537.36");
-        try (CloseableHttpResponse response1 = httpclient.execute(httpGet)) {
-            if (response1.getStatusLine().getStatusCode() == 200) {
-                HttpEntity entity1 = response1.getEntity();
-                String html = EntityUtils.toString(entity1);
-                return Jsoup.parse(html);
-            }
-        }
-        return null;
-    }
 
-    private static boolean isInterestingLink(String link) {
-        return link.contains("news.sina.cn") && link.contains("//") || "https://sina.cn".equals(link);
-    }
 }
