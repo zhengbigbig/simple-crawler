@@ -10,71 +10,45 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
-import java.io.File;
 import java.io.IOException;
-import java.sql.*;
+import java.sql.SQLException;
 import java.util.stream.Collectors;
 
 public class Main {
-    private static final String USER_NAME = "root";
-    private static final String PASSWORD = "root";
 
-    public static void main(String[] args) throws IOException, SQLException {
-        Connection connection = connectTheDatabase();
+    JdbcCrawlerDao dao = new JdbcCrawlerDao();
+
+    public void run() throws SQLException, IOException {
+
         String link;
 
         // 先从数据库里拿出来一个链接(拿出来并从数据库删除)，准备处理之
-        while ((link = getNextLinkFromDatabaseThenDelete(connection)) != null) {
+        while ((link = dao.getNextLinkFromDatabaseThenDelete()) != null) {
             // 询问数据库，当前链接是不是已经被处理过了
-            if (isLinkProcessed(connection, link)) {
+            if (dao.isLinkProcessed(link)) {
                 continue;
             }
 
             if (isInterestingLink(link)) {
                 Document doc = httpGetAndParseHtml(link);
                 assert doc != null;
-                parseUrlsFromPageAndStoreIntoDatabase(connection, doc);
+                parseUrlsFromPageAndStoreIntoDatabase(doc);
                 // 假如这是一个新闻的详细页面，就存入数据库，否则，什么都不做
-                storeIntoDatabaseIfNewsPage(connection, doc, link);
+                storeIntoDatabaseIfNewsPage(doc, link);
                 // 把处理过的放入数据库
-                updateDatabase(connection, link, "INSERT INTO LINKS_ALREADY_PROCESSED (LINK) VALUES (?)");
+                dao.insertAlreadyLinkIntoDatabase(link);
             }
         }
+    }
+
+
+    public static void main(String[] args) throws IOException, SQLException {
+        new Main().run();
 
     }
 
-    @SuppressFBWarnings("DMI_CONSTANT_DB_PASSWORD") // 强制镇压不检查
-    private static Connection connectTheDatabase() throws SQLException {
-        File projectDir = new File(System.getProperty("basedir", System.getProperty("user.dir")));
-        String jdbcUrl = "jdbc:h2:file:" + new File(projectDir, "/news").getAbsolutePath();
-        return DriverManager.getConnection(jdbcUrl, USER_NAME, PASSWORD);
-    }
 
-    private static String getNextLinkFromDatabaseThenDelete(Connection connection) throws SQLException {
-        String link = getNextLinkFromDatabase(connection, "select link from LINKS_TO_BE_PROCESSED limit 1");
-        if (link != null) {
-            updateDatabase(connection, link, "DELETE FROM LINKS_TO_BE_PROCESSED WHERE LINK = ?");
-        }
-        return link;
-    }
-
-    private static void updateDatabase(Connection connection, String link, String s) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(s)) {
-            statement.setString(1, link);
-            statement.executeUpdate();
-        }
-    }
-
-    private static String getNextLinkFromDatabase(Connection connection, String sql) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet resultSet = statement.executeQuery()) {
-            while (resultSet.next()) {
-                return resultSet.getString(1);
-            }
-        }
-        return null;
-    }
-
-    private static void parseUrlsFromPageAndStoreIntoDatabase(Connection connection, Document doc) throws SQLException {
+    private void parseUrlsFromPageAndStoreIntoDatabase(Document doc) throws SQLException {
         for (Element aTag : doc.select("a")) {
             String href = aTag.attr("href");
             if (href.startsWith("//")) {
@@ -82,29 +56,13 @@ public class Main {
             }
 
             if (!href.toLowerCase().startsWith("javascript")) {
-                updateDatabase(connection, href, "INSERT INTO LINKS_TO_BE_PROCESSED(LINK) VALUES (?)");
+                dao.insertNewLinkIntoDatabase(href);
             }
         }
     }
 
 
-    private static boolean isLinkProcessed(Connection connection, String link) throws SQLException {
-        ResultSet resultSet = null;
-        try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM LINKS_ALREADY_PROCESSED WHERE LINK = ?")) {
-            statement.setString(1, link);
-            resultSet = statement.executeQuery();
-            while (resultSet.next()) {
-                return true;
-            }
-        } finally {
-            if (resultSet != null) {
-                resultSet.close();
-            }
-        }
-        return false;
-    }
-
-    private static void storeIntoDatabaseIfNewsPage(Connection connection, Document doc, String link) throws SQLException {
+    private void storeIntoDatabaseIfNewsPage(Document doc, String link) throws SQLException {
         Elements articles = doc.select("article");
         if (!articles.isEmpty()) {
             for (Element article : articles) {
@@ -115,13 +73,7 @@ public class Main {
                 String content = article.select("p").stream().map(Element::text).collect(Collectors.joining("\n"));
                 System.out.println("content = " + content);
                 System.out.println(link);
-                try (PreparedStatement statement = connection.prepareStatement("insert into NEWS (TITLE, CONTENT, DATE, URL, CREATED_AT, MODIFIED_AT) values (?, ?, ?, ?, now(), now())")) {
-                    statement.setString(1, title);
-                    statement.setString(2, content);
-                    statement.setString(3, time);
-                    statement.setString(4, link);
-                    statement.executeUpdate();
-                }
+                dao.insertNewsIntoDatabase(link, title, time, content);
             }
         }
     }
