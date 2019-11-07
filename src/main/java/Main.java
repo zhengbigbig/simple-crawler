@@ -13,6 +13,7 @@ import org.jsoup.select.Elements;
 import java.io.File;
 import java.io.IOException;
 import java.sql.*;
+import java.util.stream.Collectors;
 
 public class Main {
     private static final String USER_NAME = "root";
@@ -34,7 +35,7 @@ public class Main {
                 assert doc != null;
                 parseUrlsFromPageAndStoreIntoDatabase(connection, doc);
                 // 假如这是一个新闻的详细页面，就存入数据库，否则，什么都不做
-                storeIntoDatabaseIfNewsPage(doc);
+                storeIntoDatabaseIfNewsPage(connection, doc, link);
                 // 把处理过的放入数据库
                 updateDatabase(connection, link, "INSERT INTO LINKS_ALREADY_PROCESSED (LINK) VALUES (?)");
             }
@@ -54,7 +55,6 @@ public class Main {
         if (link != null) {
             updateDatabase(connection, link, "DELETE FROM LINKS_TO_BE_PROCESSED WHERE LINK = ?");
         }
-        System.out.println("link = " + link);
         return link;
     }
 
@@ -77,7 +77,13 @@ public class Main {
     private static void parseUrlsFromPageAndStoreIntoDatabase(Connection connection, Document doc) throws SQLException {
         for (Element aTag : doc.select("a")) {
             String href = aTag.attr("href");
-            updateDatabase(connection, href, "INSERT INTO LINKS_TO_BE_PROCESSED(LINK) VALUES (?)");
+            if (href.startsWith("//")) {
+                href = "https:" + href;
+            }
+
+            if (!href.toLowerCase().startsWith("javascript")) {
+                updateDatabase(connection, href, "INSERT INTO LINKS_TO_BE_PROCESSED(LINK) VALUES (?)");
+            }
         }
     }
 
@@ -98,13 +104,24 @@ public class Main {
         return false;
     }
 
-    private static void storeIntoDatabaseIfNewsPage(Document doc) {
+    private static void storeIntoDatabaseIfNewsPage(Connection connection, Document doc, String link) throws SQLException {
         Elements articles = doc.select("article");
         if (!articles.isEmpty()) {
             for (Element article : articles) {
-                String title = article.children().select("h1").text();
-                String time = article.children().select("time").text();
-                System.out.println("title = " + title + " time = " + time);
+                String title = article.select("h1").text();
+                System.out.println("title = " + title);
+                String time = article.select("time").text();
+                System.out.println("time = " + time);
+                String content = article.select("p").stream().map(Element::text).collect(Collectors.joining("\n"));
+                System.out.println("content = " + content);
+                System.out.println(link);
+                try (PreparedStatement statement = connection.prepareStatement("insert into NEWS (TITLE, CONTENT, DATE, URL, CREATED_AT, MODIFIED_AT) values (?, ?, ?, ?, now(), now())")) {
+                    statement.setString(1, title);
+                    statement.setString(2, content);
+                    statement.setString(3, time);
+                    statement.setString(4, link);
+                    statement.executeUpdate();
+                }
             }
         }
     }
@@ -112,10 +129,6 @@ public class Main {
     @SuppressFBWarnings("RCN_REDUNDANT_NULLCHECK_WOULD_HAVE_BEEN_A_NPE")
     private static Document httpGetAndParseHtml(String link) throws IOException {
         CloseableHttpClient httpclient = HttpClients.createDefault();
-        if (link.startsWith("//")) {
-            link = "https:" + link;
-        }
-
         HttpGet httpGet = new HttpGet(link);
         httpGet.addHeader("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.120 Safari/537.36");
         try (CloseableHttpResponse response1 = httpclient.execute(httpGet)) {
@@ -129,6 +142,6 @@ public class Main {
     }
 
     private static boolean isInterestingLink(String link) {
-        return link.contains("//news.sina.cn") || "https://sina.cn".equals(link);
+        return link.contains("news.sina.cn") && link.contains("//") || "https://sina.cn".equals(link);
     }
 }
