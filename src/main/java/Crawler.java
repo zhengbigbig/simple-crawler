@@ -14,7 +14,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.stream.Collectors;
 
-public class Crawler extends Thread {
+public class Crawler implements Runnable {
 
     private CrawlerDao dao;
 
@@ -88,14 +88,13 @@ public class Crawler extends Thread {
                 String title = article.select("h1").text();
                 System.out.println("title = " + title);
                 String time = article.select("time").text();
-                System.out.println("time = " + time);
+//                System.out.println("time = " + time);
                 String content = article.select("p").stream().map(Element::text).collect(Collectors.joining("\n"));
-                System.out.println("content = " + content);
-                System.out.println(link);
+//                System.out.println("content = " + content);
+//                System.out.println(link);
                 dao.insertNewsIntoDatabase(link, title, time, content);
             }
         }
     }
-
 
 }
