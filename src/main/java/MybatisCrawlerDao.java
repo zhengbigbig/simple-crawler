@@ -37,7 +37,7 @@ public class MybatisCrawlerDao implements CrawlerDao {
     @Override
     public boolean isLinkProcessed(String link) {
         try (SqlSession session = sqlSessionFactory.openSession()) {
-            Integer count = (Integer) session.selectOne("selectProcessedLink", link);
+            Integer count = session.selectOne("selectProcessedLink", link);
             return count != 0;
         }
     }
