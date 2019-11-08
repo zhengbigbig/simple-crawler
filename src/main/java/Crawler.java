@@ -14,37 +14,38 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.stream.Collectors;
 
-public class Crawler {
+public class Crawler extends Thread {
 
-    MybatisCrawlerDao dao = new MybatisCrawlerDao();
+    private CrawlerDao dao;
 
-    public void run() throws SQLException, IOException {
-
-        String link;
-
-        // 先从数据库里拿出来一个链接(拿出来并从数据库删除)，准备处理之
-        while ((link = dao.getNextLinkFromDatabaseThenDelete()) != null) {
-            // 询问数据库，当前链接是不是已经被处理过了
-            if (dao.isLinkProcessed(link)) {
-                continue;
-            }
-
-            if (isInterestingLink(link)) {
-                Document doc = httpGetAndParseHtml(link);
-                assert doc != null;
-                parseUrlsFromPageAndStoreIntoDatabase(doc);
-                // 假如这是一个新闻的详细页面，就存入数据库，否则，什么都不做
-                storeIntoDatabaseIfNewsPage(doc, link);
-                // 把处理过的放入数据库
-                dao.insertAlreadyLinkIntoDatabase(link);
-            }
-        }
+    public Crawler(CrawlerDao dao) {
+        this.dao = dao;
     }
 
+    @Override
+    public void run() {
+        try {
+            String link;
+            // 先从数据库里拿出来一个链接(拿出来并从数据库删除)，准备处理之
+            while ((link = dao.getNextLinkFromDatabaseThenDelete()) != null) {
+                // 询问数据库，当前链接是不是已经被处理过了
+                if (dao.isLinkProcessed(link)) {
+                    continue;
+                }
 
-    public static void main(String[] args) throws IOException, SQLException {
-        new Crawler().run();
-
+                if (isInterestingLink(link)) {
+                    Document doc = httpGetAndParseHtml(link);
+                    assert doc != null;
+                    parseUrlsFromPageAndStoreIntoDatabase(doc);
+                    // 假如这是一个新闻的详细页面，就存入数据库，否则，什么都不做
+                    storeIntoDatabaseIfNewsPage(doc, link);
+                    // 把处理过的放入数据库
+                    dao.insertAlreadyLinkIntoDatabase(link);
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static boolean isInterestingLink(String link) {
