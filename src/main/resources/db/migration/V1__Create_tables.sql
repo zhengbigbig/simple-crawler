@@ -15,6 +15,6 @@ create table NEWS
     content     text,
     date        text,
     url         varchar(1000),
-    created_at  timestamp,
-    modified_at timestamp
+    created_at  timestamp default now(),
+    modified_at timestamp default now()
 );
