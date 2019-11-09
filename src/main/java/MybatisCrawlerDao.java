@@ -1,3 +1,4 @@
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.ibatis.io.Resources;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -8,6 +9,7 @@ import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 
+@SuppressFBWarnings("RCN_REDUNDANT_NULLCHECK_WOULD_HAVE_BEEN_A_NPE")
 public class MybatisCrawlerDao implements CrawlerDao {
 
     private SqlSessionFactory sqlSessionFactory;
@@ -23,8 +25,9 @@ public class MybatisCrawlerDao implements CrawlerDao {
         this.sqlSessionFactory = new SqlSessionFactoryBuilder().build(inputStream);
     }
 
+    // 保障线程安全，避免多线程同时爬一个url
     @Override
-    public String getNextLinkFromDatabaseThenDelete() {
+    public synchronized String getNextLinkFromDatabaseThenDelete() {
         try (SqlSession session = sqlSessionFactory.openSession(true)) {
             String link = session.selectOne("MyMapper.selectNextLink");
             if (link != null) {
