@@ -10,7 +10,7 @@
 
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/
-
+/mysql-data
 # Package Files #
 *.jar
 *.war
