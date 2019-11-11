@@ -7,7 +7,7 @@
 .idea
 # BlueJ files
 *.ctxt
-
+/mysql-data
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/
 /mysql-data
