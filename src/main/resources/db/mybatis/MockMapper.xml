@@ -5,7 +5,7 @@
 <mapper namespace="MockMapper">
     <select id="selectAllNews" resultType="News">
         select title, content, date, url, created_at, modified_at
-        from NEWS
+        from NEWS limit 2000;
     </select>
     <insert id="insertNews" parameterType="News">
         insert into NEWS (TITLE, CONTENT, DATE, URL, CREATED_AT, MODIFIED_AT)
