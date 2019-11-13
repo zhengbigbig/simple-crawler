@@ -1,10 +1,12 @@
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.http.HttpHost;
 import org.apache.ibatis.io.Resources;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.session.SqlSessionFactoryBuilder;
+import org.elasticsearch.action.bulk.BulkRequest;
+import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
@@ -31,20 +33,22 @@ public class ElasticsearchDataGenerator {
         // 查询数据库并将数据库数据导入到elasticsearch
         // 并可在浏览器 http://localhost:9200/_search?q=content:北京  将会列出相关信息
         for (int i = 0; i < 10; i++) {
-            new Thread(()->writeSingleThread(newsFromMySQL)).start();
+            new Thread(() -> writeSingleThread(newsFromMySQL)).start();
         }
     }
 
+    @SuppressFBWarnings("REC_CATCH_EXCEPTION")
     private static void writeSingleThread(List<News> newsFromMySQL) {
         try (RestHighLevelClient client = new RestHighLevelClient(RestClient.builder(new HttpHost("localhost", 9200, "http"), new HttpHost("localhost", 9201, "http")))) {
             // 单线程写入2000 * 1000 = 200_0000条数据，但是每次都发http请求依旧很慢，因此使用批处理操作
             for (int i = 0; i < 1000; i++) {
+                BulkRequest bulkRequest = new BulkRequest();
                 for (News news : newsFromMySQL) {
                     IndexRequest request = new IndexRequest("news");
 
                     Map<String, Object> data = new HashMap<>();
                     data.put("title", news.getTitle());
-                    data.put("content", news.getContent());
+                    data.put("content", news.getContent().length() > 10 ? news.getContent().substring(0, 10) : news.getContent());
                     data.put("url", news.getUrl());
                     data.put("date", news.getDate());
                     data.put("createdAt", news.getCreatedAt());
@@ -52,9 +56,10 @@ public class ElasticsearchDataGenerator {
 
                     request.source(data, XContentType.JSON);
 
-                    IndexResponse response = client.index(request, RequestOptions.DEFAULT);
-                    System.out.println(response.status().getStatus());
+                    bulkRequest.add(request);
                 }
+                BulkResponse bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT);
+                System.out.println("Current thread: " + Thread.currentThread().getName() + "finishes" + i + bulkResponse.status().getStatus());
             }
         } catch (Exception e) {
             throw new RuntimeException(e);
