@@ -8,6 +8,7 @@
 # BlueJ files
 *.ctxt
 /mysql-data
+/es-data
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/
 /mysql-data
